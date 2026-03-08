@@ -1,0 +1,4 @@
+-r prototype.txt
+isort==5.13.2
+pre-commit==3.7.1
+rich==13.7.1
