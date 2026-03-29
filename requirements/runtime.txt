@@ -1,1 +1,1 @@
--r prototype.txt
+-r ..\prototype.txt

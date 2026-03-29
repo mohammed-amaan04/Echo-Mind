@@ -2,9 +2,22 @@
 
 EchoMind is a voice-driven cognitive memory system prototype. It converts semantic outputs into persistent, queryable memory structures in PostgreSQL with pgvector-powered embeddings.
 
-**Current Status:** Phase 3 complete (Persistence Layer) + **Phase 2 Integration Ready** (Semantic Pipeline dependencies installed and validated).
+**Current Status:** Phase 4 complete (Retrieval Layer) — the system can now **answer contextual queries from memory** using hybrid vector + graph retrieval.
 
 ## What Works Right Now
+
+### Phase 4: Retrieval Layer (✅ Complete & Tested)
+
+EchoMind can reconstruct relevant memory context in response to natural-language queries:
+
+- Parses user queries to detect referenced entities, classify intent (informational/temporal/relational), and extract time filters
+- Performs **vector similarity search** on `memory_chunks.embedding` via pgvector cosine distance
+- Performs **entity-based graph search** via `entity_event_links` with multi-entity intersection semantics
+- **Merges** vector and graph results into a unified candidate set
+- **Ranks** results using a composite score: `0.4·vector_similarity + 0.3·salience + 0.2·recency + 0.1·entity_overlap`
+- **Expands** the knowledge graph to fetch linked entities and supporting memory chunks
+- **Assembles** a structured `RetrievalResult` with chronological events, entities, chunks, and a plain-text context summary
+- Exposes a `POST /retrieve` API endpoint for query access
 
 ### Phase 3: Persistence Layer (✅ Complete & Tested)
 
@@ -30,33 +43,37 @@ All required NLP models and libraries are downloaded and validated:
 - **Sentence Transformers** (`all-MiniLM-L6-v2`) — Vector embeddings (384-dim)
 - **Runtime validation** — All imports and model loading tested successfully
 
-The persistence layer is ready to receive `SemanticOutput` objects from Phase 2 semantic extraction module.
-
 ## Current Scope vs Future Phases
 
-### ✅ Implemented (Phase 3)
+### ✅ Implemented (Phase 4 — Retrieval)
+- Hybrid retrieval engine (vector similarity + entity graph + temporal + salience)
+- Query parser with entity detection, intent classification, and time filter extraction
+- Composite ranking engine with configurable weights
+- Graph expansion for contextual entity/chunk discovery
+- Context builder generating LLM-ready summaries
+- `POST /retrieve` API endpoint
+- Embedding seeding script for vector search readiness
+- 16 integration tests for retrieval behavior
+
+### ✅ Implemented (Phase 3 — Persistence)
 - Database schema + migrations (22 tables, pgvector integration)
 - Persistence controller and services (entity normalization, event creation, graph linking)
 - Queue/failure handling and DB logging
 - Dummy data seeding for end-to-end pipeline validation
-- Unit and integration tests for persistence behavior
+- 15 unit and integration tests for persistence behavior
 
 ### 🔧 Ready for Integration (Phase 2 Dependencies)
 - spaCy transformer NLP model (`en_core_web_trf`) for entity extraction
 - NLTK corpus data for text processing
 - Sentence transformers for vector embeddings (`all-MiniLM-L6-v2`)
 - All Python dependencies installed and validated
-- Environment configured for semantic pipeline development
 
-### 🚧 Pending Development (Phase 2)
-- **Semantic extraction module** (`src/echomind/semantic/`) — Entity recognition, event detection, salience scoring
-- **Worker integration** — Background processing of `processing_queue`
-- **API endpoints** — Manual semantic processing triggers
+### 🚧 Pending Development
+- **Phase 2:** Semantic extraction module (`src/echomind/semantic/`) — Entity recognition, event detection, salience scoring
+- **Phase 1:** Full source ingestion connectors (WhatsApp/Gmail/Meet/Voice)
 
 ### 📋 Future Phases
-- **Phase 1:** Full source ingestion connectors (WhatsApp/Gmail/Meet/Voice)
-- **Phase 4:** Advanced retrieval engine (vector search + graph traversal)
-- **Phase 5:** Response generation and reasoning layer
+- **Phase 5:** Response generation and reasoning layer (LLM integration)
 - **Phase 6:** End-user UI experience
 
 ## Tech Stack
@@ -101,7 +118,7 @@ python -m venv .venv
 
 ```powershell
 pip install --upgrade pip
-pip install -r requirements\prototype.txt
+pip install -r prototype.txt
 pip install -e .
 ```
 
@@ -147,17 +164,24 @@ docker compose up -d
 python -m alembic upgrade head
 ```
 
-### 7. Seed Phase 3 dummy data (optional but recommended)
+### 7. Seed data
 
 ```powershell
+# Phase 3: Create knowledge graph (users, chunks, entities, events, relationships)
 python scripts\seed_phase3.py
+
+# Phase 4: Generate vector embeddings for memory chunks
+python scripts\seed_phase4.py
 ```
 
-This creates:
+Phase 3 seed creates:
 - Test user with salience threshold preference
 - 5 dummy memory chunks (WhatsApp, Gmail, voice notes)
 - Processing queue entries
 - Example semantic outputs persisted via the controller
+
+Phase 4 seed adds:
+- Real 384-dim vector embeddings for all memory chunks (using `all-MiniLM-L6-v2`)
 
 ### 8. Run API
 
@@ -169,16 +193,37 @@ API will be available at: `http://localhost:8000`
 
 API docs (Swagger): `http://localhost:8000/docs`
 
-## Testing
-
-Run persistence-specific tests:
+### 9. Query memory (Phase 4)
 
 ```powershell
-pytest tests\test_normalizer.py -v
-pytest tests\test_persistence.py -v
+# Test retrieval endpoint
+curl -X POST http://localhost:8000/retrieve `
+  -H "Content-Type: application/json" `
+  -d '{"query_text": "What did Amaan and Abdullah decide about EchoMind?", "user_id": 1, "top_k": 5}'
 ```
 
-## Key Tables Active in Phase 3
+## Testing
+
+Run all tests (42 tests):
+
+```powershell
+pytest -v
+```
+
+Run specific test suites:
+
+```powershell
+# Entity normalization (pure unit tests, no DB)
+pytest tests\test_normalizer.py -v
+
+# Persistence layer (requires PostgreSQL)
+pytest tests\test_persistence.py -v
+
+# Retrieval layer (requires PostgreSQL + embedding model)
+pytest tests\test_retrieval.py -v
+```
+
+## Key Tables
 
 ### Cognitive Memory
 - `memory_chunks` — Raw episodic memory with embeddings and salience scores
@@ -201,56 +246,107 @@ pytest tests\test_persistence.py -v
 ```text
 src/echomind/
   api/
-    routes/              # API endpoints (health check currently)
-  core/                  # Config, logging
+    routes/
+      health.py            # Health check endpoint
+      retrieval.py         # ✅ POST /retrieve endpoint (Phase 4)
+  core/                    # Config, logging
   db/
-    models/              # 22 SQLAlchemy models (complete)
+    models/                # 22 SQLAlchemy models (complete)
     base.py
     session.py
-  persistence/           # ✅ Phase 3 complete
-    controller.py        # 7-step persistence orchestrator
-    entity_service.py    # Entity upsert + deduplication
-    event_service.py     # Event creation logic
-    relationship_service.py  # Graph linking
-    entity_normalizer.py # Name normalization + alias mapping
-    queue_manager.py     # Queue state transitions
-    failure_manager.py   # Retry + escalation logic
-    logging_service.py   # System log writes
-    schemas.py           # SemanticOutput contract
-  workers/               # Background job infrastructure
+  persistence/             # ✅ Phase 3 complete
+    controller.py          # 7-step persistence orchestrator
+    entity_service.py      # Entity upsert + deduplication
+    event_service.py       # Event creation logic
+    relationship_service.py    # Graph linking
+    entity_normalizer.py   # Name normalization + alias mapping
+    queue_manager.py       # Queue state transitions
+    failure_manager.py     # Retry + escalation logic
+    logging_service.py     # System log writes
+    schemas.py             # SemanticOutput contract
+  retrieval/               # ✅ Phase 4 complete
+    engine.py              # 7-step retrieval orchestrator
+    query_parser.py        # Query understanding (entities, intent, time)
+    vector_search.py       # pgvector semantic similarity search
+    entity_search.py       # Entity-based graph retrieval
+    graph_traversal.py     # Knowledge graph expansion
+    ranker.py              # Composite scoring engine
+    context_builder.py     # Context assembly + summary generation
+    schemas.py             # RetrievalQuery/RetrievalResult contracts
+  workers/                 # Background job infrastructure
     celery_app.py
     scheduler.py
-  main.py                # FastAPI app
+  main.py                  # FastAPI app
 alembic/
   versions/
     001_initial_schema.py  # Complete schema migration
 scripts/
-  bootstrap_nlp.py       # ✅ NLP model initialization
-  seed_phase3.py         # ✅ Dummy data seeding
+  bootstrap_nlp.py         # ✅ NLP model initialization
+  seed_phase3.py           # ✅ Knowledge graph seeding
+  seed_phase4.py           # ✅ Embedding generation
 requirements/
-  prototype.txt          # ✅ All dependencies installed
+  prototype.txt            # ✅ All dependencies installed
 tests/
-  test_persistence.py    # ✅ Persistence layer tests
-  test_normalizer.py     # ✅ Entity normalization tests
-docker-compose.yml       # PostgreSQL + Redis
+  test_health.py           # ✅ API health check test
+  test_normalizer.py       # ✅ Entity normalization tests (10)
+  test_persistence.py      # ✅ Persistence layer tests (15)
+  test_retrieval.py        # ✅ Retrieval layer tests (16)
+docker-compose.yml         # PostgreSQL + Redis
 ```
 
-### 🔜 Phase 2 Integration Will Add
+## Retrieval Layer Architecture
 
-```text
-src/echomind/
-  semantic/              # To be integrated by teammate
-    extractor.py         # Main SemanticExtractor class
-    entity_recognition.py    # spaCy NER wrapper
-    event_detection.py       # Event candidate logic
-    salience_scorer.py       # Refined salience calculation
-    relationship_extractor.py # Entity-role mapping
-  api/
-    routes/
-      semantic.py        # Processing endpoints
-  workers/
-    semantic_worker.py   # Background batch processor
+### RetrievalQuery Interface (Input)
+
+```python
+@dataclass
+class RetrievalQuery:
+    query_text: str
+    user_id: int
+    top_k: int = 10
 ```
+
+### RetrievalResult Interface (Output)
+
+```python
+@dataclass
+class RetrievalResult:
+    relevant_events: list[Event]
+    relevant_entities: list[Entity]
+    supporting_chunks: list[MemoryChunk]
+    context_summary: str
+```
+
+### Retrieval Pipeline Flow
+
+```
+User Query
+    ↓
+Query Parser (entity detection, intent, time filter)
+    ↓
+[Vector Search] + [Entity Search]
+    ↓
+Merged Candidate Events
+    ↓
+Ranking Engine (0.4·vector + 0.3·salience + 0.2·recency + 0.1·overlap)
+    ↓
+Graph Expansion (linked entities + supporting chunks)
+    ↓
+Context Builder (chronological summary)
+    ↓
+RetrievalResult (ready for LLM input in Phase 5)
+```
+
+### Database Table Usage
+
+| Table              | Usage               |
+| ------------------ | ------------------- |
+| memory_chunks      | vector similarity   |
+| entities           | entity matching     |
+| events             | core retrieval unit |
+| entity_event_links | graph traversal     |
+| event_memory_links | evidence            |
+| user_preferences   | optional filters    |
 
 ## Phase 2 Integration Contract
 
@@ -273,8 +369,6 @@ class SemanticOutput:
     relationships: list[Relationship]       # entity_name, role
     refined_salience: float                 # 0.0 - 1.0
 ```
-
-The persistence layer is **fully tested and production-ready** to receive these outputs.
 
 ## Verification Commands
 
@@ -307,17 +401,15 @@ python -m alembic current
 python -c "from echomind.db.session import engine; from sqlalchemy import inspect; print(f'✓ {len(inspect(engine).get_table_names())} tables created')"
 ```
 
-### Verify API Health
+### Verify Retrieval Layer
 
 ```powershell
 # Start API server
-uvicorn echomind.main:app --app-dir src
+uvicorn echomind.main:app --app-dir src --reload
 
-# In another terminal, test health endpoint
-curl http://localhost:8000/health
+# In another terminal, test retrieval
+curl -X POST http://localhost:8000/retrieve -H "Content-Type: application/json" -d "{\"query_text\": \"What did Amaan decide?\", \"user_id\": 1, \"top_k\": 5}"
 ```
-
-Expected response: `{"status":"healthy"}`
 
 ## Database Queries for Manual Testing
 
@@ -357,12 +449,13 @@ GROUP BY status;
 ### Run Tests
 
 ```powershell
-# All tests
+# All tests (42)
 pytest -v
 
 # Specific test files
 pytest tests\test_persistence.py -v
 pytest tests\test_normalizer.py -v
+pytest tests\test_retrieval.py -v
 
 # With coverage
 pytest --cov=echomind --cov-report=html
@@ -406,7 +499,7 @@ python -m alembic history
 3. **Layer 3:** Semantic Understanding ← *Phase 2 pending integration*
 4. **Layer 4:** Knowledge Structuring ← *Phase 3 ✅ complete*
 5. **Layer 5:** Persistence (PostgreSQL + pgvector)
-6. **Layer 6:** Retrieval
+6. **Layer 6:** Retrieval ← *Phase 4 ✅ complete*
 7. **Layer 7:** Response & Action
 8. **Layer 8:** UI
 
@@ -415,23 +508,30 @@ python -m alembic history
 ```
 memory_chunks (with embeddings)
     ↓
-[Phase 2: Semantic Extraction]  ← Teammate's development
+[Phase 2: Semantic Extraction]  ← Pending integration
     ↓
 SemanticOutput
     ↓
-[Phase 3: Persistence Layer]    ← ✅ Ready for integration
+[Phase 3: Persistence Layer]    ← ✅ Complete
     ↓
 Knowledge Graph (entities, events, relationships)
+    ↓
+[Phase 4: Retrieval Layer]      ← ✅ Complete
+    ↓
+RetrievalResult (events, entities, chunks, context_summary)
+    ↓
+[Phase 5: Response Layer]       ← Next phase
 ```
 
 ## Contributing
 
 This is a prototype project developed in phases:
 
-- **Phase 3** (current): Persistence layer stabilization
+- **Phase 4** (current): Retrieval layer — hybrid vector + graph memory search
+- **Phase 3** (complete): Persistence layer stabilization
 - **Phase 2** (in development): Semantic extraction module
 - **Phase 1** (planned): Full ingestion pipeline
-- **Phase 4+** (planned): Retrieval, reasoning, UI
+- **Phase 5+** (planned): Response generation, UI
 
 ## License
 
@@ -440,3 +540,4 @@ This is a prototype project developed in phases:
 ## Contact
 
 [Add contact information]
+

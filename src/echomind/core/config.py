@@ -15,7 +15,8 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
 
     openai_api_key: str = ""
-    openai_model: str = "gpt-4o-mini"
+    openai_model: str = "openai/gpt-oss-20b"
+    llm_base_url: str = "https://integrate.api.nvidia.com/v1"
     embedding_model: str = "all-MiniLM-L6-v2"
     spacy_model: str = "en_core_web_trf"
 
