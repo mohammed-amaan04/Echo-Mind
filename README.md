@@ -2,9 +2,21 @@
 
 EchoMind is a voice-driven cognitive memory system prototype. It converts semantic outputs into persistent, queryable memory structures in PostgreSQL with pgvector-powered embeddings.
 
-**Current Status:** Phase 4 complete (Retrieval Layer) — the system can now **answer contextual queries from memory** using hybrid vector + graph retrieval.
+**Current Status:** Phase 5 baseline implemented (Retrieval + Response) — the system can now retrieve contextual memory and generate grounded answers via a unified API flow.
 
 ## What Works Right Now
+
+### Phase 5: Response Layer (✅ Implemented & Tested)
+
+EchoMind can generate grounded responses from retrieved memory context:
+
+- Exposes a unified `POST /ask` endpoint that runs retrieval + response generation
+- Formats retrieved events/entities/chunks into an LLM-ready context block
+- Builds grounded prompts with explicit anti-hallucination rules
+- Calls an OpenAI-compatible chat-completions endpoint (configurable model/base URL)
+- Falls back safely to retrieval context summary when API key/call is unavailable
+- Computes confidence scores from context density, entity match, and salience
+- Suggests non-executing follow-up actions (`set_reminder`, `draft_message`, `follow_up`, `draft_reply`)
 
 ### Phase 4: Retrieval Layer (✅ Complete & Tested)
 
@@ -45,6 +57,13 @@ All required NLP models and libraries are downloaded and validated:
 
 ## Current Scope vs Future Phases
 
+### ✅ Implemented (Phase 5 — Response)
+- `POST /ask` endpoint (retrieval + response orchestration)
+- Context formatter + prompt builder for grounded LLM answers
+- OpenAI-compatible client with safe fallback behavior
+- Confidence scoring and rule-based action suggestion engine
+- 18 tests covering response formatting, confidence, actions, and orchestration
+
 ### ✅ Implemented (Phase 4 — Retrieval)
 - Hybrid retrieval engine (vector similarity + entity graph + temporal + salience)
 - Query parser with entity detection, intent classification, and time filter extraction
@@ -73,8 +92,8 @@ All required NLP models and libraries are downloaded and validated:
 - **Phase 1:** Full source ingestion connectors (WhatsApp/Gmail/Meet/Voice)
 
 ### 📋 Future Phases
-- **Phase 5:** Response generation and reasoning layer (LLM integration)
 - **Phase 6:** End-user UI experience
+- **Phase 7:** Production hardening (auth, observability, deployment, scale)
 
 ## Tech Stack
 
@@ -118,14 +137,14 @@ python -m venv .venv
 
 ```powershell
 pip install --upgrade pip
-pip install -r prototype.txt
+pip install -r all.txt
 pip install -e .
 ```
 
 **Troubleshooting:** If you encounter `resolution-too-deep` error, use the legacy resolver:
 
 ```powershell
-pip install --use-deprecated=legacy-resolver -r requirements\prototype.txt
+pip install --use-deprecated=legacy-resolver -r all.txt
 pip install huggingface-hub==0.36.2 packaging==24.2
 ```
 
@@ -200,11 +219,16 @@ API docs (Swagger): `http://localhost:8000/docs`
 curl -X POST http://localhost:8000/retrieve `
   -H "Content-Type: application/json" `
   -d '{"query_text": "What did Amaan and Abdullah decide about EchoMind?", "user_id": 1, "top_k": 5}'
+
+# Test unified ask endpoint (Phase 5)
+curl -X POST http://localhost:8000/ask `
+  -H "Content-Type: application/json" `
+  -d '{"query_text": "What did Amaan and Abdullah decide about EchoMind?", "user_id": 1, "top_k": 5}'
 ```
 
 ## Testing
 
-Run all tests (42 tests):
+Run all tests (currently 59 test functions):
 
 ```powershell
 pytest -v
@@ -221,6 +245,9 @@ pytest tests\test_persistence.py -v
 
 # Retrieval layer (requires PostgreSQL + embedding model)
 pytest tests\test_retrieval.py -v
+
+# Response layer (LLM calls mocked)
+pytest tests\test_response.py -v
 ```
 
 ## Key Tables
@@ -249,6 +276,7 @@ src/echomind/
     routes/
       health.py            # Health check endpoint
       retrieval.py         # ✅ POST /retrieve endpoint (Phase 4)
+      response.py          # ✅ POST /ask endpoint (Phase 5)
   core/                    # Config, logging
   db/
     models/                # 22 SQLAlchemy models (complete)
@@ -273,6 +301,14 @@ src/echomind/
     ranker.py              # Composite scoring engine
     context_builder.py     # Context assembly + summary generation
     schemas.py             # RetrievalQuery/RetrievalResult contracts
+  response/                # ✅ Phase 5 baseline implemented
+    engine.py              # Response orchestrator
+    context_formatter.py   # LLM-ready context formatting
+    prompt_builder.py      # Grounded prompt construction
+    llm_client.py          # OpenAI-compatible client + fallback
+    confidence.py          # Confidence scoring
+    actions.py             # Suggested follow-up actions
+    schemas.py             # ResponseRequest/ResponseOutput contracts
   workers/                 # Background job infrastructure
     celery_app.py
     scheduler.py
@@ -285,12 +321,15 @@ scripts/
   seed_phase3.py           # ✅ Knowledge graph seeding
   seed_phase4.py           # ✅ Embedding generation
 requirements/
-  prototype.txt            # ✅ All dependencies installed
+  runtime.txt              # Runtime dependency entrypoint (currently references prototype file)
+  dev.txt                  # Dev dependency entrypoint
+all.txt                    # Current complete dependency list used in setup
 tests/
   test_health.py           # ✅ API health check test
   test_normalizer.py       # ✅ Entity normalization tests (10)
   test_persistence.py      # ✅ Persistence layer tests (15)
   test_retrieval.py        # ✅ Retrieval layer tests (16)
+  test_response.py         # ✅ Response layer tests (18)
 docker-compose.yml         # PostgreSQL + Redis
 ```
 
@@ -449,7 +488,7 @@ GROUP BY status;
 ### Run Tests
 
 ```powershell
-# All tests (42)
+# All tests (currently 59 test functions)
 pytest -v
 
 # Specific test files
@@ -520,18 +559,25 @@ Knowledge Graph (entities, events, relationships)
     ↓
 RetrievalResult (events, entities, chunks, context_summary)
     ↓
-[Phase 5: Response Layer]       ← Next phase
+[Phase 5: Response Layer]       ← ✅ Implemented baseline
 ```
 
 ## Contributing
 
 This is a prototype project developed in phases:
 
-- **Phase 4** (current): Retrieval layer — hybrid vector + graph memory search
+- **Phase 5** (current): Response layer baseline — retrieval-grounded answering + actions
+- **Phase 4** (complete): Retrieval layer — hybrid vector + graph memory search
 - **Phase 3** (complete): Persistence layer stabilization
 - **Phase 2** (in development): Semantic extraction module
 - **Phase 1** (planned): Full ingestion pipeline
-- **Phase 5+** (planned): Response generation, UI
+- **Phase 6+** (planned): UI, production hardening
+
+## Known Gaps (Current Snapshot)
+
+- `src/echomind/semantic/` is still pending (semantic extraction pipeline not yet implemented in-repo)
+- `requirements/runtime.txt` and `requirements/dev.txt` currently point to `..\\prototype.txt`, which is not present in this workspace
+- `Dockerfile` currently copies `requirements/all.txt`, while the dependency file exists at project root as `all.txt`
 
 ## License
 
