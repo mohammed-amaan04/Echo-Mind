@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     llm_base_url: str = "https://integrate.api.nvidia.com/v1"
     embedding_model: str = "all-MiniLM-L6-v2"
     spacy_model: str = "en_core_web_trf"
+    ollama_model: str = "mistral"
+    echomind_phase2_fallback: bool = True
+    echomind_ollama_required: bool = False
 
     model_config = SettingsConfigDict(
         env_file=".env",
