@@ -35,18 +35,22 @@ def run_phase2_worker(
 
     while True:
         processed = 0
-        with SessionLocal() as session:
-            chunks = _pending_chunks(session, limit)
-            if not chunks:
-                logger.info("phase2_worker_no_pending_chunks")
-            for chunk in chunks:
-                semantic_output = pipeline.process(session, chunk)
-                result = persist_semantic_output(session, semantic_output)
-                processed += 1
-                logger.info("phase2_chunk_processed", chunk_id=chunk.id, status=result.get("status"))
+        try:
+            with SessionLocal() as session:
+                chunks = _pending_chunks(session, limit)
+                if not chunks:
+                    logger.info("phase2_worker_no_pending_chunks")
+                for chunk in chunks:
+                    semantic_output = pipeline.process(session, chunk)
+                    result = persist_semantic_output(session, semantic_output)
+                    processed += 1
+                    logger.info("phase2_chunk_processed", chunk_id=chunk.id, status=result.get("status"))
+        except Exception as exc:
+            logger.exception("phase2_worker_iteration_failed", error=str(exc))
+            if once:
+                raise
 
         if once:
             return
         if processed == 0:
             time.sleep(poll_interval_seconds)
-

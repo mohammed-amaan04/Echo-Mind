@@ -41,6 +41,8 @@ _LLM_SALIENCE_WEIGHT = 0.40
 _MAX_TRACKED_BOOST = 0.30
 _MAX_PARTICIPANT_BOOST = 0.15
 _RECENCY_BOOST = 0.05
+_MAX_EVENT_TITLE_LENGTH = 80
+_MAX_SUMMARY_LENGTH = 240
 
 _ENTITY_SYSTEM_PROMPT = """You are an entity extraction assistant for a knowledge-graph pipeline.
 
@@ -81,6 +83,15 @@ class SemanticEntity:
 def _clean_llm_json(raw: str) -> str:
     cleaned = re.sub(r"```(?:json)?", "", raw, flags=re.IGNORECASE).strip(" `\n\t")
     return cleaned
+
+
+def _env_to_bool(value: str, default: bool) -> bool:
+    parsed = str(os.getenv(value, str(default))).lower()
+    if parsed in {"1", "true", "yes"}:
+        return True
+    if parsed in {"0", "false", "no"}:
+        return False
+    return default
 
 
 def _normalize_text(value: str) -> str:
@@ -133,7 +144,9 @@ class OllamaSemanticProcessor:
             event_type = "discussion"
 
         if summary:
-            title = (event_candidates[0] if event_candidates else summary[:80]).strip()
+            title = (
+                event_candidates[0] if event_candidates else summary[:_MAX_EVENT_TITLE_LENGTH]
+            ).strip()
             if title:
                 event_candidate = EventCandidate(title=title, summary=summary, event_type=event_type)
 
@@ -169,7 +182,7 @@ class OllamaSemanticProcessor:
                 entities.append(entity)
 
         if not entities:
-            raise ValueError(f"No valid entities extracted for chunk {chunk.id}")
+            logger.warning("phase2_no_entities_extracted", chunk_id=chunk.id)
 
         return self._deduplicate(entities)
 
@@ -341,7 +354,7 @@ class FallbackSemanticProcessor:
         summary = _fallback_summary(chunk.content)
         event_candidate: EventCandidate | None = None
         if summary:
-            title = summary[:80].rstrip()
+            title = summary[:_MAX_EVENT_TITLE_LENGTH].rstrip()
             if title:
                 event_candidate = EventCandidate(title=title, summary=summary, event_type="discussion")
 
@@ -359,12 +372,8 @@ class Phase2SemanticPipeline:
         settings = get_settings()
         self.model = model or settings.ollama_model
 
-        fallback_enabled = str(
-            os.getenv("ECHOMIND_PHASE2_FALLBACK", str(settings.echomind_phase2_fallback))
-        ).lower() not in {"0", "false", "no"}
-        ollama_required = str(
-            os.getenv("ECHOMIND_OLLAMA_REQUIRED", str(settings.echomind_ollama_required))
-        ).lower() in {"1", "true", "yes"}
+        fallback_enabled = _env_to_bool("ECHOMIND_PHASE2_FALLBACK", settings.echomind_phase2_fallback)
+        ollama_required = _env_to_bool("ECHOMIND_OLLAMA_REQUIRED", settings.echomind_ollama_required)
 
         try:
             self._processor: OllamaSemanticProcessor | FallbackSemanticProcessor = (
@@ -414,4 +423,4 @@ def _fallback_summary(content: str) -> str:
     if not clean:
         return ""
     sentence = re.split(r"(?<=[.!?])\s+", clean)[0]
-    return sentence[:240]
+    return sentence[:_MAX_SUMMARY_LENGTH]
