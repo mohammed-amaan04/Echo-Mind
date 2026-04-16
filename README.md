@@ -389,7 +389,7 @@ RetrievalResult (ready for LLM input in Phase 5)
 
 ## Phase 2 Integration Contract
 
-When Phase 2 semantic extraction module is integrated, it will:
+Phase 2 semantic extraction worker now:
 
 1. **Read from:** `memory_chunks` table (via `processing_queue` with `status=pending`)
 2. **Process:** Extract entities, detect events, score salience, identify relationships
@@ -408,6 +408,28 @@ class SemanticOutput:
     relationships: list[Relationship]       # entity_name, role
     refined_salience: float                 # 0.0 - 1.0
 ```
+
+### Run Phase 2 Worker
+
+```powershell
+python scripts\\run_phase2.py --model mistral --limit 20 --once
+```
+
+Flags:
+- `--model`: Ollama model name to use
+- `--limit`: max pending chunks per batch
+- `--once`: process one batch and exit (omit for continuous polling)
+
+### Ollama + Fallback Behavior
+
+- Default behavior is resilient: if Ollama is unavailable, Phase 2 falls back to a minimal non-LLM processor.
+- Fallback still persists:
+  - participant entities as `person`
+  - entity-event role links (`participant` + conservative `mentioned`)
+  - refined salience (safe structural blend from initial salience, participants, recency)
+- Control behavior with env vars:
+  - `ECHOMIND_PHASE2_FALLBACK=1` (default)
+  - `ECHOMIND_OLLAMA_REQUIRED=false` (set `true` to fail fast when Ollama is unavailable)
 
 ## Verification Commands
 
@@ -586,4 +608,3 @@ This is a prototype project developed in phases:
 ## Contact
 
 [Add contact information]
-
