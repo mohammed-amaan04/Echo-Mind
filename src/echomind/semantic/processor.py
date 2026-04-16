@@ -353,7 +353,7 @@ class FallbackSemanticProcessor:
         summary = _fallback_summary(chunk.content)
         event_candidate: EventCandidate | None = None
         if summary:
-            title = summary[:_MAX_EVENT_TITLE_LENGTH].rstrip()
+            title = summary[:_MAX_EVENT_TITLE_LENGTH].strip()
             if title:
                 event_candidate = EventCandidate(title=title, summary=summary, event_type="discussion")
 
