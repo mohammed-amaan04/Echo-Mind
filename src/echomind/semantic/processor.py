@@ -85,8 +85,8 @@ def _clean_llm_json(raw: str) -> str:
     return cleaned
 
 
-def _env_to_bool(value: str, default: bool) -> bool:
-    parsed = str(os.getenv(value, str(default))).lower()
+def _env_to_bool(env_var_name: str, default: bool) -> bool:
+    parsed = str(os.getenv(env_var_name, str(default))).lower()
     if parsed in {"1", "true", "yes"}:
         return True
     if parsed in {"0", "false", "no"}:
@@ -144,9 +144,8 @@ class OllamaSemanticProcessor:
             event_type = "discussion"
 
         if summary:
-            title = (
-                event_candidates[0] if event_candidates else summary[:_MAX_EVENT_TITLE_LENGTH]
-            ).strip()
+            first_candidate = next(iter(event_candidates), "")
+            title = (first_candidate or summary[:_MAX_EVENT_TITLE_LENGTH]).strip()
             if title:
                 event_candidate = EventCandidate(title=title, summary=summary, event_type=event_type)
 
