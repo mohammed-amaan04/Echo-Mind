@@ -254,6 +254,7 @@ pytest tests\test_response.py -v
 
 ### Cognitive Memory
 - `memory_chunks` — Raw episodic memory with embeddings and salience scores
+- `media_files` — Media attachments (images, audio, video, documents) linked to memory chunks
 - `entities` — Deduplicated people, projects, tools (normalized via persistence layer)
 - `events` — High-salience moments (meetings, decisions, deadlines)
 - `entity_event_links` — Graph relationships with semantic roles
@@ -460,6 +461,12 @@ python -m alembic current
 
 # Count tables in database
 python -c "from echomind.db.session import engine; from sqlalchemy import inspect; print(f'✓ {len(inspect(engine).get_table_names())} tables created')"
+```
+
+```sql
+-- Count memory chunks and media files
+SELECT COUNT(*) AS memory_chunk_count FROM memory_chunks;
+SELECT COUNT(*) AS media_file_count FROM media_files;
 ```
 
 ### Verify Retrieval Layer

@@ -1,5 +1,6 @@
 from echomind.db.models.user import User, UserProfile, UserPreferences
 from echomind.db.models.memory import MemoryChunk
+from echomind.db.models.media import MediaFile
 from echomind.db.models.entity import Entity, TrackedEntity
 from echomind.db.models.event import Event
 from echomind.db.models.link import EntityEventLink, EventMemoryLink
@@ -19,6 +20,7 @@ __all__ = [
     "UserProfile",
     "UserPreferences",
     "MemoryChunk",
+    "MediaFile",
     "Entity",
     "TrackedEntity",
     "Event",
